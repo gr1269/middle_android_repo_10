@@ -11,14 +11,10 @@ interface WeatherApiService {
     
     
     companion object {
-        /*Удалён захардкоженный API-ключ.
-        Добавлена интеграция с local.properties и BuildConfig для безопасного хранения ключей.*/
         const val API_KEY = BuildConfig.OPEN_WEATHER_API_KEY
-        //Изменен на HTTPS
         const val BASE_URL = "https://api.openweathermap.org/data/2.5/"
     }
-    
-    //Использование suspend функции для выполнения запросов асинхронно c помощью корутин
+
     @GET("weather")
     suspend fun getCurrentWeather(
         @Query("lat") latitude: Double,

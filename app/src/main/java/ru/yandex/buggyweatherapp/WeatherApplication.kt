@@ -11,12 +11,6 @@ import dagger.hilt.android.HiltAndroidApp
 
 /**
  * Главный класс приложения.
- *
- * Изменения:
- * 1. Добавлена аннотация @HiltAndroidApp для поддержки Hilt Dependency Injection
- * 2. Реализован интерфейс ImageLoaderFactory для централизованной настройки Coil
- * 3. Удалены статичные ссылки на контекст, которые вызывали утечки памяти
- * 4. Настроено кэширование изображений в памяти и на диске
  */
 @HiltAndroidApp
 class WeatherApplication : Application(), ImageLoaderFactory {
@@ -25,12 +19,6 @@ class WeatherApplication : Application(), ImageLoaderFactory {
         super.onCreate()
     }
 
-    /**
-     * Создает экземпляр ImageLoader с оптимизированными настройками кэширования.
-     * Заменяет ранее используемый небезопасный класс ImageLoader.
-     *
-     * @return Настроенный экземпляр ImageLoader для загрузки и кэширования изображений
-     */
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
             .memoryCache {

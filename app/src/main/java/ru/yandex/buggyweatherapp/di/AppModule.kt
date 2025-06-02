@@ -12,9 +12,7 @@ import ru.yandex.buggyweatherapp.repository.WeatherRepository
 import ru.yandex.buggyweatherapp.repository.WeatherRepositoryImpl
 import javax.inject.Singleton
 
-/**
- * Hilt модуль для внедрения зависимостей на уровне приложения
- */
+
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {

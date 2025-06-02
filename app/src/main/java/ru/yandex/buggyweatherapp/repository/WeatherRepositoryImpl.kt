@@ -13,20 +13,10 @@ class WeatherRepositoryImpl @Inject constructor(
     private val weatherApi: WeatherApiService
 ): WeatherRepository {
 
-
-    /**
-     * Кэш для последних полученных данных о погоде.
-     * Позволяет избежать повторных запросов при повороте экрана и других пересозданиях UI.
-     */
     private var cachedWeatherData: WeatherData? = null
 
-    /**
-     * Получает данные о погоде по координатам местоположения.
-     * Выполняется в IO-потоке для избежания блокировки главного потока.
-     *
-     * @param location Местоположение для получения погоды
-     * @return Result с данными о погоде или ошибкой
-     */
+
+
     override suspend fun getWeatherData(location: Location): Result<WeatherData> =
         withContext(Dispatchers.IO) {
             try {
@@ -45,13 +35,8 @@ class WeatherRepositoryImpl @Inject constructor(
             }
         }
 
-    /**
-     * Получает данные о погоде по названию города.
-     * Выполняется в IO-потоке для избежания блокировки главного потока.
-     *
-     * @param cityName Название города для поиска
-     * @return Result с данными о погоде или ошибкой
-     */
+
+
     override suspend fun getWeatherByCity(cityName: String): Result<WeatherData> =
         withContext(Dispatchers.IO) {
             try {
@@ -71,15 +56,8 @@ class WeatherRepositoryImpl @Inject constructor(
             }
         }
 
-    /**
-     * Разбирает данные JSON, полученные от API, в объект WeatherData.
-     * Включает множество проверок на null и пустые значения для предотвращения исключений.
-     *
-     * @param json JSON-ответ от API
-     * @param location Данные о местоположении
-     * @return Объект WeatherData с данными о погоде
-     * @throws Exception если обязательные поля отсутствуют или некорректны
-     */
+
+
     private fun parseWeatherData(json: JsonObject, location: Location): WeatherData {
         try {
             // Проверяем наличие основных объектов
@@ -145,13 +123,7 @@ class WeatherRepositoryImpl @Inject constructor(
         }
     }
 
-    /**
-     * Извлекает данные о местоположении из JSON-ответа API.
-     * Включает проверки на null и корректность данных.
-     *
-     * @param json JSON-ответ от API
-     * @return Объект Location с извлеченными данными или значениями по умолчанию в случае ошибки
-     */
+
     private fun extractLocationFromResponse(json: JsonObject): Location {
         try {
             // Проверяем наличие координат

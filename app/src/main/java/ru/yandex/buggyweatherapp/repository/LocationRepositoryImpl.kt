@@ -81,7 +81,6 @@ class LocationRepositoryImpl @Inject constructor(
                         )
                         currentLocation = userLocation
 
-                        // Прекращаем запрашивать обновления после получения первой локации
                         stopLocationUpdates()
 
                         if (continuation.isActive) {

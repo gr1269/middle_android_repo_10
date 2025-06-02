@@ -24,22 +24,10 @@ import ru.yandex.buggyweatherapp.viewmodel.WeatherViewModel
 
 /**
  * Главная активность приложения.
- *
- * Изменения:
- * 1. Добавлена аннотация @AndroidEntryPoint для поддержки Hilt
- * 2. Использование viewModels() для получения ViewModel
- * 3. Реализована корректная обработка разрешений на местоположение
- * 4. Использование ActivityResultContracts вместо устаревших onRequestPermissionsResult
- * 5. Добавлено сообщение пользователю при отказе в разрешениях
- * 6. Включен режим edge-to-edge для современного UI
  */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    /**
-     * Инициализация ViewModel с помощью Hilt.
-     * Ранее использовался небезопасный способ создания ViewModel вручную.
-     */
     private val weatherViewModel: WeatherViewModel by viewModels()
 
     /**

@@ -47,7 +47,6 @@ class WeatherViewModel @Inject constructor(
     private val _cityNameState = MutableStateFlow<String?>(null)
     val cityNameState: StateFlow<String?> = _cityNameState.asStateFlow()
 
-    // Заменили Timer на Job для безопасного периодического обновления
     private var refreshJob: Job? = null
     private var fetchWeatherJob: Job? = null
 
@@ -152,7 +151,6 @@ class WeatherViewModel @Inject constructor(
         return WeatherIconMapper.getIconUrl(iconCode)
     }
 
-    // Метод toggleFavorite был удален, так как функциональность избранного не используется
 
     /**
      * Запускает автоматическое обновление погоды с использованием корутин вместо Timer.
