@@ -6,152 +6,177 @@ import android.os.Looper
 import android.util.Log
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import ru.yandex.buggyweatherapp.WeatherApplication
+import ru.yandex.buggyweatherapp.R
 import ru.yandex.buggyweatherapp.model.Location
 import ru.yandex.buggyweatherapp.model.WeatherData
 import ru.yandex.buggyweatherapp.repository.LocationRepository
+import ru.yandex.buggyweatherapp.repository.LocationRepositoryImpl
 import ru.yandex.buggyweatherapp.repository.WeatherRepository
-import ru.yandex.buggyweatherapp.utils.ImageLoader
+import ru.yandex.buggyweatherapp.utils.UiState
+import ru.yandex.buggyweatherapp.utils.WeatherIconMapper
 import java.util.Timer
 import java.util.TimerTask
+import javax.inject.Inject
 
-class WeatherViewModel : ViewModel() {
-    
-    
-    private lateinit var activityContext: Context
-    
-    
-    private val weatherRepository = WeatherRepository()
-    private val locationRepository by lazy { 
-        LocationRepository(activityContext)
-    }
-    
-    
-    val weatherData = MutableLiveData<WeatherData>()
-    val currentLocation = MutableLiveData<Location>()
-    val isLoading = MutableLiveData<Boolean>()
-    val error = MutableLiveData<String>()
-    val cityName = MutableLiveData<String>()
-    
-    
-    private val coroutineScope = CoroutineScope(Dispatchers.Main + Job())
-    
-    
-    private var refreshTimer: Timer? = null
-    
-    
-    fun initialize(context: Context) {
-        this.activityContext = context
+@HiltViewModel
+class WeatherViewModel @Inject constructor(
+    private val weatherRepository: WeatherRepository,
+    private val locationRepository: LocationRepository,
+    @ApplicationContext private val context: Context
+): ViewModel() {
+
+
+    private val _weatherUiState = MutableStateFlow<UiState<WeatherData>>(UiState.Loading)
+    val weatherUiState: StateFlow<UiState<WeatherData>> = _weatherUiState.asStateFlow()
+
+    private val _locationState = MutableStateFlow<Location?>(null)
+    val locationState: StateFlow<Location?> = _locationState.asStateFlow()
+
+    private val _cityNameState = MutableStateFlow<String?>(null)
+    val cityNameState: StateFlow<String?> = _cityNameState.asStateFlow()
+
+    private var refreshJob: Job? = null
+    private var fetchWeatherJob: Job? = null
+
+    init {
         fetchCurrentLocationWeather()
-        
-        
         startAutoRefresh()
     }
-    
-    
+
     fun fetchCurrentLocationWeather() {
-        isLoading.value = true
-        error.value = null
-        
-        locationRepository.getCurrentLocation { location ->
-            if (location != null) {
-                currentLocation.value = location
-                
-                
-                val cityNameFromLocation = locationRepository.getCityNameFromLocation(location)
-                cityName.value = cityNameFromLocation
-                
-                getWeatherForLocation(location)
-            } else {
-                isLoading.value = false
-                error.value = "Unable to get current location"
+        _weatherUiState.value = UiState.Loading
+
+        viewModelScope.launch {
+            try {
+                locationRepository.getCurrentLocation().fold(
+                    onSuccess = { location ->
+                        _locationState.value = location
+
+                        // Получаем название города
+                        locationRepository.getCityNameFromLocation(location).fold(
+                            onSuccess = { cityName ->
+                                _cityNameState.value = cityName
+                            },
+                            onFailure = { error ->
+                                Log.e("WeatherViewModel", "Error getting city name", error)
+                            }
+                        )
+
+                        // Получаем данные о погоде
+                        getWeatherForLocation(location)
+                    },
+                    onFailure = { error ->
+                        _weatherUiState.value = UiState.Error(
+                            context.getString(R.string.location_error) + ": ${error.message}"
+                        )
+                    }
+                )
+            } catch (e: Exception) {
+                _weatherUiState.value = UiState.Error(
+                    context.getString(R.string.location_error) + ": ${e.message}"
+                )
             }
         }
     }
-    
+
     fun getWeatherForLocation(location: Location) {
-        isLoading.value = true
-        error.value = null
-        
-        weatherRepository.getWeatherData(location) { data, exception ->
-            
-            Handler(Looper.getMainLooper()).post {
-                isLoading.value = false
-                
-                if (data != null) {
-                    weatherData.value = data
-                } else {
-                    error.value = exception?.message ?: "Unknown error"
-                }
+        fetchWeatherJob?.cancel()
+
+        fetchWeatherJob = viewModelScope.launch {
+            _weatherUiState.value = UiState.Loading
+
+            try {
+                weatherRepository.getWeatherData(location).fold(
+                    onSuccess = { data ->
+                        _weatherUiState.value = UiState.Success(data)
+                    },
+                    onFailure = { error ->
+                        _weatherUiState.value = UiState.Error(
+                            error.message ?: context.getString(R.string.network_error)
+                        )
+                    }
+                )
+            } catch (e: Exception) {
+                _weatherUiState.value = UiState.Error(
+                    context.getString(R.string.network_error) + ": ${e.message}"
+                )
             }
         }
     }
-    
+
     fun searchWeatherByCity(city: String) {
         if (city.isBlank()) {
-            error.value = "City name cannot be empty"
+            _weatherUiState.value = UiState.Error(context.getString(R.string.empty_city_error))
             return
         }
-        
-        isLoading.value = true
-        error.value = null
-        
-        
-        weatherRepository.getWeatherByCity(city) { data, exception ->
-            
-            isLoading.value = false
-            
-            if (data != null) {
-                weatherData.value = data
-                cityName.value = data.cityName
-                currentLocation.value = Location(0.0, 0.0, data.cityName)
-            } else {
-                error.value = exception?.message ?: "Unknown error"
+
+        fetchWeatherJob?.cancel()
+        fetchWeatherJob = viewModelScope.launch {
+            _weatherUiState.value = UiState.Loading
+
+            try {
+                weatherRepository.getWeatherByCity(city).fold(
+                    onSuccess = { data ->
+                        _weatherUiState.value = UiState.Success(data)
+                        _cityNameState.value = data.cityName
+                        _locationState.value = Location(0.0, 0.0, data.cityName)
+                    },
+                    onFailure = { error ->
+                        _weatherUiState.value = UiState.Error(
+                            error.message ?: context.getString(R.string.network_error)
+                        )
+                    }
+                )
+            } catch (e: Exception) {
+                _weatherUiState.value = UiState.Error(
+                    context.getString(R.string.network_error) + ": ${e.message}"
+                )
             }
         }
     }
-    
-    
-    fun formatTemperature(temp: Double): String {
-        return "${temp.toInt()}°C"
+
+    fun getWeatherIconUrl(iconCode: String): String {
+        return WeatherIconMapper.getIconUrl(iconCode)
     }
-    
-    
-    fun loadWeatherIcon(iconCode: String) {
-        coroutineScope.launch {
-            val iconUrl = "https://openweathermap.org/img/wn/$iconCode@2x.png"
-            ImageLoader.loadImage(iconUrl)
-        }
-    }
-    
-    
+
+
+    /**
+     * Запускает автоматическое обновление погоды с использованием корутин вместо Timer.
+     * Это решает проблему с scheduleAtFixedRate, который может вызвать неожиданное поведение
+     * когда процессы Android кэшируются и возобновляются.
+     */
     private fun startAutoRefresh() {
-        refreshTimer = Timer()
-        refreshTimer?.scheduleAtFixedRate(object : TimerTask() {
-            override fun run() {
-                currentLocation.value?.let { location ->
+        refreshJob?.cancel() // Отменяем предыдущую задачу, если она существует
+        refreshJob = viewModelScope.launch {
+            while (isActive) { // Проверяем, активна ли корутина
+                delay(60000) // Задержка в 60 секунд перед первым обновлением
+                _locationState.value?.let { location ->
                     getWeatherForLocation(location)
                 }
             }
-        }, 60000, 60000)
-    }
-    
-    
-    fun toggleFavorite() {
-        weatherData.value?.let {
-            it.isFavorite = !it.isFavorite
-            
-            weatherData.value = it
         }
     }
-    
-    
+
+    /**
+     * Очищает ресурсы при уничтожении ViewModel.
+     * Отменяет все запущенные корутины и останавливает обновления локации.
+     */
     override fun onCleared() {
         super.onCleared()
-        
+        refreshJob?.cancel() // Отменяем задачу автообновления
+        fetchWeatherJob?.cancel() // Отменяем текущий запрос погоды
+        locationRepository.stopLocationUpdates()
     }
 }
